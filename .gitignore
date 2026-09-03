@@ -1,0 +1,9 @@
+# 依赖
+node_modules/
+
+# 构建日志 / 临时文件
+*.log
+.DS_Store
+
+# 说明：main.js 为构建产物，保留在仓库中以便直接部署到 Obsidian（install.sh 依赖它）
+main.js
