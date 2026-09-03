@@ -23,7 +23,7 @@ During normal Obsidian use, deleting notes or attachments often leaves a pile of
 | 定时扫描 | 按设定间隔（秒）定期自动清理 | 关闭 |
 | 删除方式 | 系统回收站 / `.trash` / 永久删除 | 移入回收站 |
 | 中英文界面 | 设置页与提示支持 English / 中文切换 | 自动（跟随系统） |
-| 控制台日志 | 打印扫描与删除日志，便于排查 | 开启 |
+| 控制台日志 | 打印扫描与删除日志，便于排查 | 关闭 |
 | 保留空附件目录 | 是否连同空的附件目录本身一起删除 | 关闭（保留） |
 
 | Feature | Description | Default |
@@ -37,7 +37,7 @@ During normal Obsidian use, deleting notes or attachments often leaves a pile of
 | Scheduled scan | Automatically cleans at a configurable interval (seconds) | Off |
 | Delete mode | System trash / `.trash` / permanent delete | Move to trash |
 | Bilingual UI | Settings and notices in English / Chinese | Auto (follow system) |
-| Console logging | Prints scan and deletion logs for troubleshooting | On |
+| Console logging | Prints scan and deletion logs for troubleshooting | Off |
 | Keep empty attachment dirs | Whether to also delete the empty attachment directory itself | Off (keep) |
 
 ## 📦 安装 / Installation

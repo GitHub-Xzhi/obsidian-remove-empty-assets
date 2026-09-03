@@ -208,7 +208,7 @@ interface PluginSettings {
 const DEFAULT_SETTINGS: PluginSettings = {
 	attachmentPath: ".attachments",
 	deleteMode: "trash",
-	consoleLog: true,
+	consoleLog: false,
 	deleteEmptyRoot: false,
 	scanOnNoteDelete: true,
 	scanOnAttachmentDelete: true,
