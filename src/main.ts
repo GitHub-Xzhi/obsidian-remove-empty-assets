@@ -115,6 +115,10 @@ interface PluginSettings {
 	scanOnNoteDelete: boolean;
 	/** 删除附件/附件目录内子目录时自动定点扫描所在附件目录 */
 	scanOnAttachmentDelete: boolean;
+	/** 定时扫描：是否开启 */
+	timerEnabled: boolean;
+	/** 定时扫描间隔（秒） */
+	timerInterval: number;
 }
 
 const DEFAULT_SETTINGS: PluginSettings = {
@@ -124,6 +128,8 @@ const DEFAULT_SETTINGS: PluginSettings = {
 	deleteEmptyRoot: false,
 	scanOnNoteDelete: true,
 	scanOnAttachmentDelete: true,
+	timerEnabled: false,
+	timerInterval: 3600,
 };
 
 /** 一个待清理的目标目录：优先使用 vault 相对路径；absPath 仅用于仓库外的绝对路径配置（桌面端） */
@@ -144,6 +150,9 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 
 	// 由本插件自己移动/删除的路径（用于忽略由此触发的 delete/rename 事件，避免自我触发重复扫描）
 	private selfMovedPaths: Set<string> = new Set();
+
+	// 定时扫描定时器
+	private scanTimer: number | null = null;
 
 	async onload() {
 		await this.loadSettings();
@@ -181,13 +190,33 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 		);
 
 		this.addSettingTab(new RemoveEmptyAssetsSettingTab(this.app, this));
+
+		// 定时扫描
+		this.startScanTimer();
 	}
 
 	onunload() {
-		// 清理防抖定时器
+		// 清理防抖定时器与定时扫描
 		if (this.deleteScanTimer !== null) {
 			window.clearTimeout(this.deleteScanTimer);
 			this.deleteScanTimer = null;
+		}
+		if (this.scanTimer !== null) {
+			window.clearInterval(this.scanTimer);
+			this.scanTimer = null;
+		}
+	}
+
+	/** 启动/重启定时扫描（设置变更后也调用） */
+	startScanTimer(): void {
+		if (this.scanTimer !== null) {
+			window.clearInterval(this.scanTimer);
+			this.scanTimer = null;
+		}
+		if (this.settings.timerEnabled && this.settings.timerInterval > 0) {
+			this.scanTimer = window.setInterval(() => {
+				void this.runCleanup(true, "定时");
+			}, Math.max(1, this.settings.timerInterval) * 1000);
 		}
 	}
 
@@ -668,6 +697,36 @@ class RemoveEmptyAssetsSettingTab extends PluginSettingTab {
 					.onChange(async (value) => {
 						this.plugin.settings.scanOnAttachmentDelete = value;
 						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("定时扫描")
+			.setDesc("按设定的间隔（秒）定期自动清理空目录。")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.timerEnabled)
+					.onChange(async (value) => {
+						this.plugin.settings.timerEnabled = value;
+						await this.plugin.saveSettings();
+						this.plugin.startScanTimer();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("扫描间隔（秒）")
+			.setDesc("两次定时扫描之间的间隔，单位：秒。")
+			.addText((text) =>
+				text
+					.setPlaceholder("3600")
+					.setValue(String(this.plugin.settings.timerInterval))
+					.onChange(async (value) => {
+						const n = parseInt(value, 10);
+						if (!isNaN(n) && n > 0) {
+							this.plugin.settings.timerInterval = n;
+							await this.plugin.saveSettings();
+							this.plugin.startScanTimer();
+						}
 					})
 			);
 
