@@ -428,15 +428,16 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 				return moved;
 			}
 			// 桌面端：优先移入系统回收站
-			const shell = await electronShell();
-			if (shell) {
+			// 用 Obsidian 的 vault.trash(file, true) 而非 electron.shell.trashItem：
+			// 插件运行在渲染进程，Windows 上渲染进程调用 shell.trashItem 会报
+			// "Failed to create FileOperation instance"（Electron 已知问题 #29598）；
+			// vault.trash 走 Obsidian 主进程实现，与 Obsidian 核心删除一致，可正常进系统回收站。
+			const folder = this.app.vault.getAbstractFileByPath(relPath);
+			if (folder) {
 				try {
-					const abs = (this.app.vault.adapter as any).getFullPath?.(relPath);
-					if (abs) {
-						await shell.trashItem(abs);
-						this.log("[删除] 移入系统回收站:", relPath);
-						return true;
-					}
+					await this.app.vault.trash(folder, true);
+					this.log("[删除] 移入系统回收站:", relPath);
+					return true;
 				} catch (e) {
 					console.error("[Remove Empty Assets] 移入系统回收站失败:", relPath, e);
 				}
