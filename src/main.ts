@@ -78,6 +78,27 @@ function perNoteSubdir(raw: string): string {
 		.replace(/[/\\]+$/, "");
 }
 
+/** 判断 childPath 是否位于 dirPath 目录内（childPath 等于 dirPath 也算在内） */
+function isInside(childPath: string, dirPath: string): boolean {
+	if (!dirPath || dirPath === "/") {
+		return true;
+	}
+	const dir = dirPath.replace(/\/+$/, "");
+	return childPath === dir || childPath.startsWith(dir + "/");
+}
+
+/** 查找文件路径上最深的一层名为 sub 的祖先目录（vault 相对路径），找不到返回 null */
+function findDeepestSubdirAncestor(filePath: string, sub: string): string | null {
+	const parts = filePath.split("/");
+	parts.pop(); // 去掉末尾的文件/目录名，只保留祖先目录链
+	for (let i = parts.length - 1; i >= 0; i--) {
+		if (parts[i] === sub) {
+			return normalizePath(parts.slice(0, i + 1).join("/"));
+		}
+	}
+	return null;
+}
+
 // ---------------------------------------------------------------------------
 // 设置
 // ---------------------------------------------------------------------------
@@ -134,10 +155,19 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 			}, 2000);
 		});
 
-		// 监听 md 文件删除：触发定点扫描（./ 配置只扫被删笔记的附件目录，不做全库扫描）
+		// 监听删除：md 笔记删除 → 定点扫描其附件目录；附件/子目录删除 → 若位于附件目录内则定点扫描
 		this.registerEvent(
 			this.app.vault.on("delete", (file) => {
 				this.onFileDeleted(file);
+			})
+		);
+
+		// 监听移到仓库内 .trash（Obsidian 设置为"移到 .trash"时的删除，走的是 rename 而非 delete）
+		this.registerEvent(
+			this.app.vault.on("rename", (file, oldPath) => {
+				if (file.path.startsWith(".trash/")) {
+					this.onFileDeleted(file, oldPath);
+				}
 			})
 		);
 
@@ -220,42 +250,64 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 	}
 
 	// -----------------------------------------------------------------------
-	// md 文件删除触发：定点扫描被删笔记的附件目录（./ 配置只扫该目录，不做全库扫描）
+	// 删除触发：md 笔记删除 → 定点扫描其附件目录；
+	// 附件/子目录删除 → 若位于附件目录内，定点扫描该附件目录
+	// originalPath：rename 到 .trash 时传入文件原路径（此时 file.path 已变成 .trash/...）
 	// -----------------------------------------------------------------------
-	onFileDeleted(file: TAbstractFile): void {
-		// 只关心 markdown 文件被删除
-		if (!(file instanceof TFile) || file.extension !== "md") {
-			return;
-		}
-
+	onFileDeleted(file: TAbstractFile, originalPath?: string): void {
+		const path = originalPath ?? file.path;
 		const raw = (this.settings.attachmentPath || "").trim();
 		if (!raw) {
 			return;
 		}
 
+		const isMd = file instanceof TFile && file.extension === "md";
+		const isAbsCfg = isAbsolutePath(raw);
+		const isPerNoteCfg = isPerNotePath(raw);
+		const parentOfPath = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
+
 		let target: CleanTarget | null = null;
-		if (isPerNotePath(raw)) {
-			// ./ 配置：定位到被删笔记所在目录下的附件子目录
+
+		if (isAbsCfg) {
+			// 绝对路径配置：仅桌面端；附件删除发生在仓库内，不会命中仓库外路径，只有 md 删除才扫描
+			if (Platform.isDesktop && isMd) {
+				target = { relPath: "", absPath: raw };
+			}
+		} else if (isPerNoteCfg) {
 			const sub = perNoteSubdir(raw);
 			if (!sub) {
 				return;
 			}
-			const parentDir = file.parent ? file.parent.path : "";
-			const rel = parentDir ? normalizePath(parentDir + "/" + sub) : sub;
-			target = { relPath: rel };
-		} else {
-			// 其他配置（全局单一目录）：直接解析出该目录
-			const targets = this.resolveTargetDirs();
-			if (targets.length > 0) {
-				target = targets[0];
+			if (isMd) {
+				// md 删除：定位到被删笔记所在目录下的附件子目录
+				const rel = parentOfPath ? normalizePath(parentOfPath + "/" + sub) : sub;
+				target = { relPath: rel };
+			} else {
+				// 附件/子目录删除：定位其所在的最深同名 <sub> 目录
+				const rel = findDeepestSubdirAncestor(path, sub);
+				target = rel ? { relPath: rel } : null;
 			}
+		} else {
+			// 其他配置（全局单一目录，相对仓库根）
+			const targets = this.resolveTargetDirs();
+			if (targets.length === 0) {
+				return;
+			}
+			if (!isMd) {
+				// 附件/子目录删除：仅当位于该附件目录内才扫描
+				const dirOfDeleted = file instanceof TFile ? parentOfPath : path;
+				if (!isInside(dirOfDeleted, targets[0].relPath)) {
+					return;
+				}
+			}
+			target = targets[0];
 		}
 
 		if (!target) {
 			return;
 		}
 
-		this.log("检测到 md 删除，加入定点扫描队列:", file.path, "→", target.relPath || target.absPath);
+		this.log("检测到删除，加入定点扫描队列:", path, "→", target.relPath || target.absPath);
 
 		// 防抖：合并短时间内的多次删除，避免频繁扫描
 		this.pendingDeleteTargets.push(target);
@@ -269,9 +321,9 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 		}, 1500);
 	}
 
-	/** 对一组定点目标执行清理（笔记删除触发） */
+	/** 对一组定点目标执行清理（删除触发） */
 	async runTargetedCleanup(targets: CleanTarget[]): Promise<void> {
-		this.log("[扫描] md 删除触发，定点扫描目标:",
+		this.log("[扫描] 删除触发，定点扫描目标:",
 			targets.map((t) => t.relPath || t.absPath));
 		let deleted = 0;
 		let errors = 0;
