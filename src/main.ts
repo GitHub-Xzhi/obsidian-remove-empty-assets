@@ -536,9 +536,14 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 		if (errors > 0) {
 			parts.push(this.t("noticeErrors", { n: errors }));
 		}
-		if (this.settings.deleteMode === "trash") {
-			parts.push(Platform.isMobile ? this.t("noticeTrashMobile") : this.t("noticeTrashDesktop"));
-		}
+		// 弹窗同样标注删除方式：系统回收站 / .trash 回收文件夹 / 永久删除
+		parts.push(
+			this.settings.deleteMode === "trash"
+				? Platform.isMobile
+					? this.t("noticeTrashMobile")
+					: this.t("noticeTrashDesktop")
+				: this.t("noticePermanent")
+		);
 		new Notice(parts.join(""));
 	}
 
