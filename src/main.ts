@@ -88,12 +88,15 @@ interface PluginSettings {
 	deleteMode: "trash" | "permanent";
 	/** 是否在控制台打印扫描与删除日志 */
 	consoleLog: boolean;
+	/** 附件目录本身为空时是否一并删除（false=保留，只删内部的空子目录） */
+	deleteEmptyRoot: boolean;
 }
 
 const DEFAULT_SETTINGS: PluginSettings = {
 	attachmentPath: ".attachments",
 	deleteMode: "trash",
 	consoleLog: true,
+	deleteEmptyRoot: false,
 };
 
 /** 一个待清理的目标目录：优先使用 vault 相对路径；absPath 仅用于仓库外的绝对路径配置（桌面端） */
@@ -341,7 +344,9 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 	//       则该目录被判定为空并删除（递归清理，上层目录因此变空时也会一并删除）。
 	// 返回删除的目录数量。
 	// -----------------------------------------------------------------------
-	async cleanRelative(relPath: string): Promise<number> {
+	// 递归清理：isRoot=true 表示这是配置的目标目录本身（受 deleteEmptyRoot 开关控制）；
+	// isRoot=false 表示目标内部的子目录（空则始终删除）
+	async cleanRelative(relPath: string, isRoot = true): Promise<number> {
 		const adapter = this.app.vault.adapter;
 
 		if (!(await adapter.exists(relPath))) {
@@ -351,12 +356,16 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 		const listing = await adapter.list(relPath);
 		let deleted = 0;
 		for (const folder of listing.folders) {
-			deleted += await this.cleanRelative(folder);
+			deleted += await this.cleanRelative(folder, false);
 		}
 
 		// 子目录处理完毕后再次检查：目录是否已空（没有任何文件、也没有剩余子目录）
 		const again = await adapter.list(relPath);
 		if (again.files.length === 0 && again.folders.length === 0) {
+			// 目标目录本身为空时，是否删除由开关控制；子目录为空则始终删除
+			if (isRoot && !this.settings.deleteEmptyRoot) {
+				return deleted; // 保留空的附件目录本身
+			}
 			if (await this.deleteDir(relPath)) {
 				deleted += 1;
 			}
@@ -367,7 +376,8 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 	// -----------------------------------------------------------------------
 	// 递归清理（仓库外绝对路径，仅桌面端）
 	// -----------------------------------------------------------------------
-	async cleanAbsolute(absPath: string): Promise<number> {
+	// 递归清理（仓库外绝对路径，仅桌面端）：isRoot=true 表示配置的目标目录本身
+	async cleanAbsolute(absPath: string, isRoot = true): Promise<number> {
 		const fs = nodeFs();
 		let entries: any[];
 		try {
@@ -382,11 +392,15 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 		let deleted = 0;
 		for (const ent of entries) {
 			if (ent.isDirectory()) {
-				deleted += await this.cleanAbsolute(absPath.replace(/[\\/]+$/, "") + "/" + ent.name);
+				deleted += await this.cleanAbsolute(absPath.replace(/[\\/]+$/, "") + "/" + ent.name, false);
 			}
 		}
 
 		if (fs.readdirSync(absPath).length === 0) {
+			// 目标目录本身为空时，是否删除由开关控制；子目录为空则始终删除
+			if (isRoot && !this.settings.deleteEmptyRoot) {
+				return deleted; // 保留空的附件目录本身
+			}
 			if (this.settings.deleteMode === "trash") {
 				const shell = await electronShell();
 				if (shell) {
@@ -537,6 +551,21 @@ class RemoveEmptyAssetsSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.deleteMode)
 					.onChange(async (value) => {
 						this.plugin.settings.deleteMode = value as PluginSettings["deleteMode"];
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("空的附件目录本身也删除")
+			.setDesc(
+				"开启后，当附件目录（如 ./assets）本身为空时，也会一并删除；" +
+				"关闭则只删除其中的空子目录，保留附件目录本身（默认关闭）。"
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.deleteEmptyRoot)
+					.onChange(async (value) => {
+						this.plugin.settings.deleteEmptyRoot = value;
 						await this.plugin.saveSettings();
 					})
 			);
