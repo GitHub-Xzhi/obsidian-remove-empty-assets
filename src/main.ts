@@ -378,7 +378,7 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 				console.error("[Remove Empty Assets] 清理失败:", t.relPath || t.absPath, e);
 			}
 		}
-		this.log(`[扫描完成] ${source}，共删除 ${deleted} 个空目录，失败 ${errors} 个`);
+		this.log(`[扫描完成] ${source}，共删除 ${deleted} 个空目录，失败 ${errors} 个（删除方式：${this.deleteModeLabel()}）`);
 
 		// 静默启动且无任何变化时不再打扰用户
 		if (silent && deleted === 0 && errors === 0) {
@@ -643,7 +643,7 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 				if (shell) {
 					try {
 						await shell.trashItem(absPath);
-						this.log("[删除] 移入系统回收站:", absPath);
+						this.log("[删除][系统回收站] 移入:", absPath);
 						deleted += 1;
 						return deleted;
 					} catch (e) {
@@ -657,10 +657,18 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 				return deleted;
 			}
 			fs.rmSync(absPath, { recursive: true, force: true });
-			this.log("[删除] 永久删除:", absPath);
+			this.log("[删除][永久删除]:", absPath);
 			deleted += 1;
 		}
 		return deleted;
+	}
+
+	/** 当前删除方式的日志标签（用于汇总日志：系统回收站 / .trash 回收文件夹 / 永久删除） */
+	deleteModeLabel(): string {
+		if (this.settings.deleteMode === "permanent") {
+			return "永久删除";
+		}
+		return Platform.isMobile ? ".trash 回收文件夹" : "系统回收站";
 	}
 
 	// -----------------------------------------------------------------------
@@ -674,7 +682,7 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 				// 移动端：移到 Obsidian 自带的 .trash 回收文件夹（可恢复）
 				const moved = await this.moveToObsidianTrash(relPath);
 				if (moved) {
-					this.log("[删除] 移入 .trash 回收文件夹:", relPath);
+					this.log("[删除][.trash 回收文件夹] 移入:", relPath);
 				}
 				return moved;
 			}
@@ -688,7 +696,7 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 				try {
 					this.markSelfMoved(relPath); // 忽略由此触发的 delete 事件，避免重复扫描
 					await this.app.vault.trash(folder, true);
-					this.log("[删除] 移入系统回收站:", relPath);
+					this.log("[删除][系统回收站] 移入:", relPath);
 					return true;
 				} catch (e) {
 					console.error("[Remove Empty Assets] 移入系统回收站失败:", relPath, e);
@@ -698,7 +706,7 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 			try {
 				const moved = await this.moveToObsidianTrash(relPath);
 				if (moved) {
-					this.log("[删除] 系统回收站不可用，改移入 .trash 回收文件夹:", relPath);
+					this.log("[删除][.trash 回收文件夹] 系统回收站不可用，改移入:", relPath);
 					return true;
 				}
 				return false; // 目录已不存在，无需处理
@@ -709,7 +717,7 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 		}
 		// 用户显式选择“永久删除”时才直接删除
 		await this.app.vault.adapter.remove(relPath);
-		this.log("[删除] 永久删除:", relPath);
+		this.log("[删除][永久删除]:", relPath);
 		return true;
 	}
 
