@@ -111,6 +111,10 @@ interface PluginSettings {
 	consoleLog: boolean;
 	/** 附件目录本身为空时是否一并删除（false=保留，只删内部的空子目录） */
 	deleteEmptyRoot: boolean;
+	/** 删除 md 笔记时自动定点扫描其附件目录 */
+	scanOnNoteDelete: boolean;
+	/** 删除附件/附件目录内子目录时自动定点扫描所在附件目录 */
+	scanOnAttachmentDelete: boolean;
 }
 
 const DEFAULT_SETTINGS: PluginSettings = {
@@ -118,6 +122,8 @@ const DEFAULT_SETTINGS: PluginSettings = {
 	deleteMode: "trash",
 	consoleLog: true,
 	deleteEmptyRoot: false,
+	scanOnNoteDelete: true,
+	scanOnAttachmentDelete: true,
 };
 
 /** 一个待清理的目标目录：优先使用 vault 相对路径；absPath 仅用于仓库外的绝对路径配置（桌面端） */
@@ -281,6 +287,13 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 		}
 
 		const isMd = file instanceof TFile && file.extension === "md";
+		// 两个开关分别控制两种自动触发
+		if (isMd && !this.settings.scanOnNoteDelete) {
+			return;
+		}
+		if (!isMd && !this.settings.scanOnAttachmentDelete) {
+			return;
+		}
 		const isAbsCfg = isAbsolutePath(raw);
 		const isPerNoteCfg = isPerNotePath(raw);
 		const parentOfPath = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
@@ -630,6 +643,30 @@ class RemoveEmptyAssetsSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.deleteMode)
 					.onChange(async (value) => {
 						this.plugin.settings.deleteMode = value as PluginSettings["deleteMode"];
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("删除 md 笔记时自动扫描")
+			.setDesc("删除 md 笔记后，自动定点扫描其附件目录并清理空目录。")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.scanOnNoteDelete)
+					.onChange(async (value) => {
+						this.plugin.settings.scanOnNoteDelete = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("删除附件时自动扫描")
+			.setDesc("删除附件或附件目录内的子目录后，自动定点扫描所在附件目录并清理空目录。")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.scanOnAttachmentDelete)
+					.onChange(async (value) => {
+						this.plugin.settings.scanOnAttachmentDelete = value;
 						await this.plugin.saveSettings();
 					})
 			);
