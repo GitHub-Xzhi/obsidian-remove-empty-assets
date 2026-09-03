@@ -5,5 +5,5 @@ node_modules/
 *.log
 .DS_Store
 
-# 说明：main.js 为构建产物，保留在仓库中以便直接部署到 Obsidian（install.sh 依赖它）
+# 构建产物
 main.js

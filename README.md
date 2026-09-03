@@ -10,6 +10,13 @@ Obsidian 使用过程中，删除笔记或附件后，附件目录里常常残�
 
 During normal Obsidian use, deleting notes or attachments often leaves a pile of empty folders behind in your attachment directories. Remove Empty Assets cleans them up for you: the attachment directory path is configurable (absolute / relative to each note / relative to the vault root), and cleanup can be triggered automatically on startup, on note or attachment deletion, on a schedule, or manually from the command palette. Deletion can go to the system trash, the `.trash` folder, or be permanent.
 
+## 👀 预览 / Preview
+
+<div align="center">
+  <img src="assets/README/设置预览-中文.png" alt="设置界面（中文）" width="50%"/>
+  <img src="assets/README/设置预览-英文.png" alt="Settings interface (English)" width="48%"/>
+</div>
+
 ## ✨ 功能特性 / Features
 
 | 功能 | 描述 | 默认值 |
