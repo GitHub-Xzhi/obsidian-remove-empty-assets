@@ -116,6 +116,7 @@ const STRINGS: Record<string, { zh: string; en: string }> = {
 	noticeErrors: { zh: "，{n} 个目录处理失败（详见控制台）", en: ", {n} folder(s) failed (see console)" },
 	noticeTrashMobile: { zh: "（已移入 .trash 回收文件夹）", en: " (moved to the .trash folder)" },
 	noticeTrashDesktop: { zh: "（已移入系统回收站）", en: " (moved to system trash)" },
+	noticePermanent: { zh: "（永久删除）", en: " (permanently deleted)" },
 
 	settingLanguageName: { zh: "语言", en: "Language" },
 	settingLanguageDesc: { zh: "界面语言；自动 = 跟随系统。", en: "UI language; Auto follows your system." },
@@ -389,9 +390,14 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 		if (errors > 0) {
 			parts.push(this.t("noticeErrors", { n: errors }));
 		}
-		if (this.settings.deleteMode === "trash") {
-			parts.push(Platform.isMobile ? this.t("noticeTrashMobile") : this.t("noticeTrashDesktop"));
-		}
+		// 弹窗同样标注删除方式：系统回收站 / .trash 回收文件夹 / 永久删除
+		parts.push(
+			this.settings.deleteMode === "trash"
+				? Platform.isMobile
+					? this.t("noticeTrashMobile")
+					: this.t("noticeTrashDesktop")
+				: this.t("noticePermanent")
+		);
 		new Notice(parts.join(""));
 	}
 
