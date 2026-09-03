@@ -816,8 +816,6 @@ class RemoveEmptyAssetsSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		new Setting(containerEl).setName("Remove Empty Assets").setHeading();
-
 		// 语言
 		new Setting(containerEl)
 			.setName(this.plugin.t("settingLanguageName"))
