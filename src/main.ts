@@ -357,8 +357,9 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 		// 子目录处理完毕后再次检查：目录是否已空（没有任何文件、也没有剩余子目录）
 		const again = await adapter.list(relPath);
 		if (again.files.length === 0 && again.folders.length === 0) {
-			await this.deleteDir(relPath);
-			deleted += 1;
+			if (await this.deleteDir(relPath)) {
+				deleted += 1;
+			}
 		}
 		return deleted;
 	}
@@ -395,9 +396,14 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 						deleted += 1;
 						return deleted;
 					} catch (e) {
-						console.error("[Remove Empty Assets] 移入回收站失败，改为永久删除:", absPath, e);
+						// 回收站失败：跳过，绝不回退为永久删除（避免瞬时故障造成数据丢失）
+						console.error("[Remove Empty Assets] 移入系统回收站失败，已跳过（未删除）:", absPath, e);
+						return deleted;
 					}
 				}
+				// 无回收站实现可用：跳过
+				console.error("[Remove Empty Assets] 系统回收站不可用，已跳过（未删除）:", absPath);
+				return deleted;
 			}
 			fs.rmSync(absPath, { recursive: true, force: true });
 			this.log("[删除] 永久删除:", absPath);
@@ -408,16 +414,20 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 
 	// -----------------------------------------------------------------------
 	// 删除目录（vault 内）：按设置与平台选择 系统回收站 / .trash / 永久删除
+	// 返回 true=已删除；false=未删除（跳过或目录已不存在）
+	// 注意：回收站模式下绝不回退为永久删除，避免瞬时故障导致不可逆的数据丢失
 	// -----------------------------------------------------------------------
-	async deleteDir(relPath: string): Promise<void> {
+	async deleteDir(relPath: string): Promise<boolean> {
 		if (this.settings.deleteMode === "trash") {
 			if (Platform.isMobile) {
 				// 移动端：移到 Obsidian 自带的 .trash 回收文件夹（可恢复）
-				await this.moveToObsidianTrash(relPath);
-				this.log("[删除] 移入 .trash 回收文件夹:", relPath);
-				return;
+				const moved = await this.moveToObsidianTrash(relPath);
+				if (moved) {
+					this.log("[删除] 移入 .trash 回收文件夹:", relPath);
+				}
+				return moved;
 			}
-			// 桌面端：移入系统回收站
+			// 桌面端：优先移入系统回收站
 			const shell = await electronShell();
 			if (shell) {
 				try {
@@ -425,22 +435,36 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 					if (abs) {
 						await shell.trashItem(abs);
 						this.log("[删除] 移入系统回收站:", relPath);
-						return;
+						return true;
 					}
 				} catch (e) {
-					console.error("[Remove Empty Assets] 移入系统回收站失败，改为永久删除:", relPath, e);
+					console.error("[Remove Empty Assets] 移入系统回收站失败:", relPath, e);
 				}
 			}
+			// 回收站失败：回退到仓库内 .trash 回收文件夹（仍可恢复，绝不永久删除）
+			try {
+				const moved = await this.moveToObsidianTrash(relPath);
+				if (moved) {
+					this.log("[删除] 系统回收站不可用，改移入 .trash 回收文件夹:", relPath);
+					return true;
+				}
+				return false; // 目录已不存在，无需处理
+			} catch (e) {
+				console.error("[Remove Empty Assets] 移入 .trash 也失败，已跳过（未删除）:", relPath, e);
+				return false;
+			}
 		}
-		// 永久删除（或回收站不可用时的回退）
+		// 用户显式选择“永久删除”时才直接删除
 		await this.app.vault.adapter.remove(relPath);
 		this.log("[删除] 永久删除:", relPath);
+		return true;
 	}
 
 	// -----------------------------------------------------------------------
 	// 移动端回收：把空目录移动到仓库根目录下的 .trash 回收文件夹
+	// 返回 true=已移动；false=目录已不存在
 	// -----------------------------------------------------------------------
-	async moveToObsidianTrash(relPath: string): Promise<void> {
+	async moveToObsidianTrash(relPath: string): Promise<boolean> {
 		const adapter = this.app.vault.adapter;
 
 		// 确保 .trash 存在（vault.rename 不会自动创建父目录）
@@ -457,9 +481,10 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 		const folder = this.app.vault.getAbstractFileByPath(relPath);
 		if (!folder) {
 			// 目录已不存在，无需移动
-			return;
+			return false;
 		}
 		await this.app.vault.rename(folder, target);
+		return true;
 	}
 }
 
