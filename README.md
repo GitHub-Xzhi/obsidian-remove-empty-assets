@@ -17,7 +17,7 @@ During normal Obsidian use, deleting notes or attachments often leaves a pile of
 | 跨平台 | 桌面端与移动端通用；移动端使用 `.trash` 回收文件夹 | 始终启用 |
 | 路径可配置 | 支持绝对路径、相对每个笔记目录（`./` 开头）、相对仓库根目录三种写法 | `.attachments` |
 | 递归清理 | 先删空子目录，上层因此变空时也一并删除 | 始终启用 |
-| 启动自动清理 | 打开仓库时自动清理一次 | 开启 |
+| 启动自动清理 | 打开仓库时自动清理一次（可关闭） | 开启 |
 | 删除笔记自动扫描 | 删除 md 笔记后定点扫描其附件目录 | 开启 |
 | 删除附件自动扫描 | 删除附件或附件目录内子目录后定点扫描所在目录 | 开启 |
 | 定时扫描 | 按设定间隔（秒）定期自动清理 | 关闭 |
@@ -31,7 +31,7 @@ During normal Obsidian use, deleting notes or attachments often leaves a pile of
 | Cross-platform | Works on desktop and mobile; mobile uses the `.trash` folder | Always on |
 | Configurable path | Absolute path, relative to each note (`./` prefix), or relative to the vault root | `.attachments` |
 | Recursive cleanup | Empty subfolders are removed first, then emptied parents are removed too | Always on |
-| Cleanup on startup | Runs once when the vault opens | On |
+| Cleanup on startup | Runs once when the vault opens (can be disabled) | On |
 | Scan on note deletion | Scans a note's attachment directory when the note is deleted | On |
 | Scan on attachment deletion | Scans the containing directory when an attachment or subfolder is deleted | On |
 | Scheduled scan | Automatically cleans at a configurable interval (seconds) | Off |
@@ -84,6 +84,7 @@ During normal Obsidian use, deleting notes or attachments often leaves a pile of
 | --- | --- |
 | 附件目录路径 | ① 绝对路径（仅桌面端）；② `./` 开头=相对每个笔记目录；③ `.attachments` 等=相对仓库根 |
 | 删除方式 | 回收站：桌面端=系统回收站、移动端=`.trash`；或永久删除 |
+| 启动时自动扫描 | 打开仓库时自动清理一次 |
 | 删除 md 笔记时自动扫描 | 删除笔记后定点扫描其附件目录 |
 | 删除附件时自动扫描 | 删除附件/子目录后定点扫描所在附件目录 |
 | 定时扫描 | 按间隔（秒）定期自动清理 |
@@ -97,6 +98,7 @@ During normal Obsidian use, deleting notes or attachments often leaves a pile of
 | --- | --- |
 | Attachment directory path | ① absolute path (desktop only); ② `./` prefix = relative to each note; ③ `.attachments` etc. = relative to the vault root |
 | Delete mode | Trash: system trash on desktop / `.trash` on mobile; or permanent delete |
+| Auto-scan on startup | Runs a cleanup once when the vault opens |
 | Auto-scan when a note is deleted | Scans the note's attachment directory after deletion |
 | Auto-scan when an attachment is deleted | Scans the containing directory after an attachment/subfolder is deleted |
 | Scheduled scan | Periodically cleans at an interval (seconds) |
