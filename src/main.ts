@@ -100,6 +100,80 @@ function findDeepestSubdirAncestor(filePath: string, sub: string): string | null
 }
 
 // ---------------------------------------------------------------------------
+// 国际化
+// ---------------------------------------------------------------------------
+type Lang = "zh" | "en";
+
+/** 界面文案：中文 / English（仅覆盖用户可见的界面与提示，控制台日志保持原样便于排查） */
+const STRINGS: Record<string, { zh: string; en: string }> = {
+	commandName: { zh: "删除空附件目录", en: "Delete empty asset folders" },
+
+	noticeNoTargets: {
+		zh: "没有找到可清理的附件目录（请检查设置中的附件目录路径）。",
+		en: "No asset directories found to clean (check the attachment path in settings).",
+	},
+	noticeCleaned: { zh: "已清理 {n} 个空目录", en: "Cleaned {n} empty folder(s)" },
+	noticeErrors: { zh: "，{n} 个目录处理失败（详见控制台）", en: ", {n} folder(s) failed (see console)" },
+	noticeTrashMobile: { zh: "（已移入 .trash 回收文件夹）", en: " (moved to the .trash folder)" },
+	noticeTrashDesktop: { zh: "（已移入系统回收站）", en: " (moved to system trash)" },
+
+	settingLanguageName: { zh: "语言", en: "Language" },
+	settingLanguageDesc: { zh: "界面语言；自动 = 跟随系统。", en: "UI language; Auto follows your system." },
+	optionAuto: { zh: "自动（跟随系统）", en: "Auto (follow system)" },
+	optionZh: { zh: "中文", en: "Chinese" },
+	optionEn: { zh: "English", en: "English" },
+
+	settingAttachmentPathName: { zh: "附件目录路径", en: "Attachment directory path" },
+	settingAttachmentPathDesc: {
+		zh: "支持四种写法：① 绝对路径，如 D:\\notes\\attachments（仅桌面端）；② 以 \"./\" 开头表示相对每个笔记目录，如 ./assets；③ 以 \".\" 开头（无斜杠）表示相对仓库根目录，如 .attachments；④ 其他写法相对仓库根目录，如 attachments。",
+		en: "Four formats are supported: ① an absolute path such as D:\\notes\\attachments (desktop only); ② a path starting with \"./\" is relative to each note folder, e.g. ./assets; ③ a path starting with \".\" (no slash) is relative to the vault root, e.g. .attachments; ④ anything else is relative to the vault root, e.g. attachments.",
+	},
+
+	settingDeleteModeName: { zh: "删除方式", en: "Delete mode" },
+	settingDeleteModeDesc: {
+		zh: "移入回收站：桌面端=系统回收站，移动端=.trash 回收文件夹（均可恢复，更安全）；永久删除不可恢复。",
+		en: "Move to trash: system trash on desktop, .trash folder on mobile (both recoverable and safer); permanently deleting cannot be undone.",
+	},
+	optionTrash: { zh: "移入回收站（可恢复）", en: "Move to trash (recoverable)" },
+	optionPermanent: { zh: "永久删除（不可恢复）", en: "Permanently delete (irreversible)" },
+
+	settingScanNoteName: { zh: "删除 md 笔记时自动扫描", en: "Auto-scan when a note is deleted" },
+	settingScanNoteDesc: {
+		zh: "删除 md 笔记后，自动定点扫描其附件目录并清理空目录。",
+		en: "Automatically scan a note's attachment directory and clean empty folders after the note is deleted.",
+	},
+	settingScanAttachmentName: { zh: "删除附件时自动扫描", en: "Auto-scan when an attachment is deleted" },
+	settingScanAttachmentDesc: {
+		zh: "删除附件或附件目录内的子目录后，自动定点扫描所在附件目录并清理空目录。",
+		en: "Automatically scan the containing attachment directory and clean empty folders after an attachment or a subfolder inside it is deleted.",
+	},
+
+	settingDeleteEmptyRootName: { zh: "空的附件目录本身也删除", en: "Also delete empty attachment directories" },
+	settingDeleteEmptyRootDesc: {
+		zh: "开启后，当附件目录（如 ./assets）本身为空时，也会一并删除；关闭则只删除其中的空子目录，保留附件目录本身（默认关闭）。",
+		en: "When enabled, an attachment directory (e.g. ./assets) is also deleted when it is empty; when disabled, only empty subfolders are deleted and the attachment directory itself is kept (default off).",
+	},
+
+	settingTimerName: { zh: "定时扫描", en: "Scheduled scan" },
+	settingTimerDesc: { zh: "按设定的间隔（秒）定期自动清理空目录。", en: "Automatically clean empty folders at a fixed interval (in seconds)." },
+	settingTimerIntervalName: { zh: "扫描间隔（秒）", en: "Scan interval (seconds)" },
+	settingTimerIntervalDesc: { zh: "两次定时扫描之间的间隔，单位：秒。", en: "The interval between two scheduled scans, in seconds." },
+
+	settingConsoleLogName: { zh: "控制台日志", en: "Console logging" },
+	settingConsoleLogDesc: {
+		zh: "开启后，在开发者控制台打印扫描与删除日志（便于排查）。",
+		en: "Print scan and deletion logs to the developer console for troubleshooting.",
+	},
+
+	settingCleanNowName: { zh: "立即清理", en: "Clean now" },
+	settingCleanNowDesc: {
+		zh: "手动执行一次清理，效果与命令面板的「删除空附件目录」相同。",
+		en: "Run a cleanup manually, same as the \"Delete empty asset folders\" command.",
+	},
+	buttonClean: { zh: "执行清理", en: "Run cleanup" },
+};
+
+// ---------------------------------------------------------------------------
 // 设置
 // ---------------------------------------------------------------------------
 interface PluginSettings {
@@ -119,6 +193,8 @@ interface PluginSettings {
 	timerEnabled: boolean;
 	/** 定时扫描间隔（秒） */
 	timerInterval: number;
+	/** 界面语言：auto 跟随系统；zh 中文；en English */
+	language: "auto" | "zh" | "en";
 }
 
 const DEFAULT_SETTINGS: PluginSettings = {
@@ -130,6 +206,7 @@ const DEFAULT_SETTINGS: PluginSettings = {
 	scanOnAttachmentDelete: true,
 	timerEnabled: false,
 	timerInterval: 3600,
+	language: "auto",
 };
 
 /** 一个待清理的目标目录：优先使用 vault 相对路径；absPath 仅用于仓库外的绝对路径配置（桌面端） */
@@ -160,7 +237,7 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 		// 命令面板手动触发
 		this.addCommand({
 			id: "remove-empty-assets",
-			name: "删除空附件目录",
+			name: this.t("commandName"),
 			callback: () => {
 				void this.runCleanup(false, "命令面板");
 			},
@@ -228,6 +305,36 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 		await this.saveData(this.settings);
 	}
 
+	/** 解析当前界面语言 */
+	lang(): Lang {
+		if (this.settings.language === "zh" || this.settings.language === "en") {
+			return this.settings.language;
+		}
+		// 自动：优先跟随 Obsidian 界面语言，其次系统语言
+		try {
+			const obsLang = window.localStorage.getItem("language");
+			if (obsLang && obsLang.toLowerCase().startsWith("zh")) {
+				return "zh";
+			}
+		} catch (e) {
+			// 忽略
+		}
+		return (navigator.language || "").toLowerCase().startsWith("zh") ? "zh" : "en";
+	}
+
+	/** 取当前语言的文案，支持 {n} 占位符 */
+	t(key: string, vars?: Record<string, string | number>): string {
+		const lang = this.lang();
+		const entry = STRINGS[key];
+		let s = entry ? (entry[lang] ?? entry.en) : key;
+		if (vars) {
+			for (const k of Object.keys(vars)) {
+				s = s.replace(new RegExp(`\\{${k}\\}`, "g"), String(vars[k]));
+			}
+		}
+		return s;
+	}
+
 	/** 控制台日志：仅当设置开启时打印 */
 	private log(...args: unknown[]): void {
 		if (this.settings.consoleLog) {
@@ -244,7 +351,7 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 			targets.map((t) => t.relPath || t.absPath));
 		if (targets.length === 0) {
 			if (!silent) {
-				new Notice("没有找到可清理的附件目录（请检查设置中的附件目录路径）。");
+				new Notice(this.t("noticeNoTargets"));
 			}
 			this.log(`[扫描完成] ${source}，无目标目录`);
 			return;
@@ -267,12 +374,12 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 			return;
 		}
 
-		const parts = [`已清理 ${deleted} 个空目录`];
+		const parts = [this.t("noticeCleaned", { n: deleted })];
 		if (errors > 0) {
-			parts.push(`，${errors} 个目录处理失败（详见控制台）`);
+			parts.push(this.t("noticeErrors", { n: errors }));
 		}
 		if (this.settings.deleteMode === "trash") {
-			parts.push(Platform.isMobile ? "（已移入 .trash 回收文件夹）" : "（已移入系统回收站）");
+			parts.push(Platform.isMobile ? this.t("noticeTrashMobile") : this.t("noticeTrashDesktop"));
 		}
 		new Notice(parts.join(""));
 	}
@@ -408,12 +515,12 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 			return;
 		}
 
-		const parts = [`已清理 ${deleted} 个空目录`];
+		const parts = [this.t("noticeCleaned", { n: deleted })];
 		if (errors > 0) {
-			parts.push(`，${errors} 个目录处理失败（详见控制台）`);
+			parts.push(this.t("noticeErrors", { n: errors }));
 		}
 		if (this.settings.deleteMode === "trash") {
-			parts.push(Platform.isMobile ? "（已移入 .trash 回收文件夹）" : "（已移入系统回收站）");
+			parts.push(Platform.isMobile ? this.t("noticeTrashMobile") : this.t("noticeTrashDesktop"));
 		}
 		new Notice(parts.join(""));
 	}
@@ -641,14 +748,26 @@ class RemoveEmptyAssetsSettingTab extends PluginSettingTab {
 
 		containerEl.createEl("h2", { text: "Remove Empty Assets" });
 
+		// 语言
 		new Setting(containerEl)
-			.setName("附件目录路径")
-			.setDesc(
-				"支持四种写法：① 绝对路径，如 D:\\notes\\attachments（仅桌面端）；" +
-				"② 以 \"./\" 开头表示相对每个笔记目录，如 ./assets（清理各笔记目录下名为 assets 的子目录）；" +
-				"③ 以 \".\" 开头（无斜杠）表示相对仓库根目录，如 .attachments；" +
-				"④ 其他写法相对仓库根目录，如 attachments。删除 md 笔记时会自动定点扫描其附件目录。"
-			)
+			.setName(this.plugin.t("settingLanguageName"))
+			.setDesc(this.plugin.t("settingLanguageDesc"))
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption("auto", this.plugin.t("optionAuto"))
+					.addOption("zh", this.plugin.t("optionZh"))
+					.addOption("en", this.plugin.t("optionEn"))
+					.setValue(this.plugin.settings.language)
+					.onChange(async (value) => {
+						this.plugin.settings.language = value as PluginSettings["language"];
+						await this.plugin.saveSettings();
+						this.display(); // 立即按新语言重绘设置页
+					})
+			);
+
+		new Setting(containerEl)
+			.setName(this.plugin.t("settingAttachmentPathName"))
+			.setDesc(this.plugin.t("settingAttachmentPathDesc"))
 			.addText((text) =>
 				text
 					.setPlaceholder(".attachments")
@@ -660,15 +779,12 @@ class RemoveEmptyAssetsSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("删除方式")
-			.setDesc(
-				"移入回收站：桌面端=系统回收站，移动端=.trash 回收文件夹（均可恢复，更安全）；" +
-				"永久删除不可恢复。"
-			)
+			.setName(this.plugin.t("settingDeleteModeName"))
+			.setDesc(this.plugin.t("settingDeleteModeDesc"))
 			.addDropdown((dropdown) =>
 				dropdown
-					.addOption("trash", "移入回收站（可恢复）")
-					.addOption("permanent", "永久删除（不可恢复）")
+					.addOption("trash", this.plugin.t("optionTrash"))
+					.addOption("permanent", this.plugin.t("optionPermanent"))
 					.setValue(this.plugin.settings.deleteMode)
 					.onChange(async (value) => {
 						this.plugin.settings.deleteMode = value as PluginSettings["deleteMode"];
@@ -677,8 +793,8 @@ class RemoveEmptyAssetsSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("删除 md 笔记时自动扫描")
-			.setDesc("删除 md 笔记后，自动定点扫描其附件目录并清理空目录。")
+			.setName(this.plugin.t("settingScanNoteName"))
+			.setDesc(this.plugin.t("settingScanNoteDesc"))
 			.addToggle((toggle) =>
 				toggle
 					.setValue(this.plugin.settings.scanOnNoteDelete)
@@ -689,8 +805,8 @@ class RemoveEmptyAssetsSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("删除附件时自动扫描")
-			.setDesc("删除附件或附件目录内的子目录后，自动定点扫描所在附件目录并清理空目录。")
+			.setName(this.plugin.t("settingScanAttachmentName"))
+			.setDesc(this.plugin.t("settingScanAttachmentDesc"))
 			.addToggle((toggle) =>
 				toggle
 					.setValue(this.plugin.settings.scanOnAttachmentDelete)
@@ -701,8 +817,8 @@ class RemoveEmptyAssetsSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("定时扫描")
-			.setDesc("按设定的间隔（秒）定期自动清理空目录。")
+			.setName(this.plugin.t("settingTimerName"))
+			.setDesc(this.plugin.t("settingTimerDesc"))
 			.addToggle((toggle) =>
 				toggle
 					.setValue(this.plugin.settings.timerEnabled)
@@ -714,8 +830,8 @@ class RemoveEmptyAssetsSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("扫描间隔（秒）")
-			.setDesc("两次定时扫描之间的间隔，单位：秒。")
+			.setName(this.plugin.t("settingTimerIntervalName"))
+			.setDesc(this.plugin.t("settingTimerIntervalDesc"))
 			.addText((text) =>
 				text
 					.setPlaceholder("3600")
@@ -731,11 +847,8 @@ class RemoveEmptyAssetsSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("空的附件目录本身也删除")
-			.setDesc(
-				"开启后，当附件目录（如 ./assets）本身为空时，也会一并删除；" +
-				"关闭则只删除其中的空子目录，保留附件目录本身（默认关闭）。"
-			)
+			.setName(this.plugin.t("settingDeleteEmptyRootName"))
+			.setDesc(this.plugin.t("settingDeleteEmptyRootDesc"))
 			.addToggle((toggle) =>
 				toggle
 					.setValue(this.plugin.settings.deleteEmptyRoot)
@@ -746,8 +859,8 @@ class RemoveEmptyAssetsSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("控制台日志")
-			.setDesc("开启后，在开发者控制台打印扫描与删除日志（便于排查）。")
+			.setName(this.plugin.t("settingConsoleLogName"))
+			.setDesc(this.plugin.t("settingConsoleLogDesc"))
 			.addToggle((toggle) =>
 				toggle
 					.setValue(this.plugin.settings.consoleLog)
@@ -758,11 +871,11 @@ class RemoveEmptyAssetsSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("立即清理")
-			.setDesc("手动执行一次清理，效果与命令面板的「删除空附件目录」相同。")
+			.setName(this.plugin.t("settingCleanNowName"))
+			.setDesc(this.plugin.t("settingCleanNowDesc"))
 			.addButton((button) =>
 				button
-					.setButtonText("执行清理")
+					.setButtonText(this.plugin.t("buttonClean"))
 					.setCta()
 					.onClick(() => {
 						void this.plugin.runCleanup(false, "设置按钮");
