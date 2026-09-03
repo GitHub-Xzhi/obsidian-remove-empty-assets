@@ -1,75 +1,122 @@
 # Remove Empty Assets
 
-Obsidian 插件：删除附件目录中的**空目录**，支持桌面端与移动端。附件目录位置可配置，支持绝对路径、相对笔记目录、相对仓库根三种写法；删除 md 笔记或删除附件（含「移到 .trash」的情况）时会自动定点扫描对应附件目录。
+> 一个用于 Obsidian 的轻量插件：删除附件目录中的**空目录**，支持桌面端与移动端。
+>
+> A lightweight Obsidian plugin that removes **empty folders** inside your attachment directories. Works on both desktop and mobile.
 
-## 功能
+## 📖 项目简介 / Overview
 
-- **删除空目录**：清理附件目录中没有任何文件（含隐藏文件）的目录。
-- **递归清理**：先删空子目录，若上层目录因此变空，也一并删除。
-- **可配置附件目录**：
-  - 绝对路径：如 `D:\notes\attachments` —— 只处理这一个目录（**仅桌面端**）；
-  - 以 `./` 开头：如 `./assets` —— 相对**每个笔记目录**，扫描全库中所有名为 `assets` 的子目录，逐个清理；
-  - 以 `.` 开头（无斜杠）：如 `.attachments` —— 相对**仓库根目录**（即仓库根下的隐藏文件夹）；
-  - 其他相对路径：如 `attachments` —— 相对**仓库根目录**。
-- **两种删除方式**（设置中切换，默认移入回收站）：
-  - 移入回收站：桌面端 = 系统回收站，移动端 = Obsidian 自带的 `.trash` 回收文件夹（均可恢复，更安全）；
-  - 永久删除：不可恢复，清理更干净。
-- **三种触发方式**：
-  - 打开仓库（启动）时自动清理一次；
-  - **删除时自动定点扫描**：删除 md 笔记会扫描其附件目录；删除附件或附件目录内的子目录（含 Obsidian「移到 .trash」的情况）也会扫描所在附件目录（`./` 配置只扫对应目录，不做全库扫描）；
-  - 命令面板命令「删除空附件目录」手动触发。
+Obsidian 使用过程中，删除笔记或附件后，附件目录里常常残留大量空目录。Remove Empty Assets 会自动清理这些空目录：附件目录路径可配置（绝对路径 / 相对每个笔记目录 / 相对仓库根），支持启动自动清理、删除笔记/附件时定点扫描、定时扫描、命令面板手动触发，并可在系统回收站、`.trash` 回收文件夹与永久删除之间切换删除方式。
 
-## 安装
+During normal Obsidian use, deleting notes or attachments often leaves a pile of empty folders behind in your attachment directories. Remove Empty Assets cleans them up for you: the attachment directory path is configurable (absolute / relative to each note / relative to the vault root), and cleanup can be triggered automatically on startup, on note or attachment deletion, on a schedule, or manually from the command palette. Deletion can go to the system trash, the `.trash` folder, or be permanent.
 
-开发/自用：
+## ✨ 功能特性 / Features
 
-1. 将项目构建产物 `main.js`、`manifest.json`、`styles.css` 复制到仓库的
-   `.obsidian/plugins/remove-empty-assets/` 目录；
-2. 在 Obsidian「设置 → 第三方插件」中启用 **Remove Empty Assets**。
+| 功能 | 描述 | 默认值 |
+| --- | --- | --- |
+| 跨平台 | 桌面端与移动端通用；移动端使用 `.trash` 回收文件夹 | 始终启用 |
+| 路径可配置 | 支持绝对路径、相对每个笔记目录（`./` 开头）、相对仓库根目录三种写法 | `.attachments` |
+| 递归清理 | 先删空子目录，上层因此变空时也一并删除 | 始终启用 |
+| 启动自动清理 | 打开仓库时自动清理一次 | 开启 |
+| 删除笔记自动扫描 | 删除 md 笔记后定点扫描其附件目录 | 开启 |
+| 删除附件自动扫描 | 删除附件或附件目录内子目录后定点扫描所在目录 | 开启 |
+| 定时扫描 | 按设定间隔（秒）定期自动清理 | 关闭 |
+| 删除方式 | 系统回收站 / `.trash` / 永久删除 | 移入回收站 |
+| 中英文界面 | 设置页与提示支持 English / 中文切换 | 自动（跟随系统） |
+| 控制台日志 | 打印扫描与删除日志，便于排查 | 开启 |
+| 保留空附件目录 | 是否连同空的附件目录本身一起删除 | 关闭（保留） |
 
-## 使用
+| Feature | Description | Default |
+| --- | --- | --- |
+| Cross-platform | Works on desktop and mobile; mobile uses the `.trash` folder | Always on |
+| Configurable path | Absolute path, relative to each note (`./` prefix), or relative to the vault root | `.attachments` |
+| Recursive cleanup | Empty subfolders are removed first, then emptied parents are removed too | Always on |
+| Cleanup on startup | Runs once when the vault opens | On |
+| Scan on note deletion | Scans a note's attachment directory when the note is deleted | On |
+| Scan on attachment deletion | Scans the containing directory when an attachment or subfolder is deleted | On |
+| Scheduled scan | Automatically cleans at a configurable interval (seconds) | Off |
+| Delete mode | System trash / `.trash` / permanent delete | Move to trash |
+| Bilingual UI | Settings and notices in English / Chinese | Auto (follow system) |
+| Console logging | Prints scan and deletion logs for troubleshooting | On |
+| Keep empty attachment dirs | Whether to also delete the empty attachment directory itself | Off (keep) |
 
-- 打开「设置 → 第三方插件 → Remove Empty Assets」，填写附件目录路径，选择删除方式；
-- 删除方式选「移入回收站」时，桌面端通过 Obsidian 自带的系统回收站接口（`vault.trash`，与 Obsidian 内部删除一致）移入系统回收站；若系统回收站失败，会自动回退到仓库内 `.trash` 回收文件夹（仍可恢复），**绝不会自动改为永久删除**——两者都失败时会跳过该目录并打印错误日志；
-- 「空的附件目录本身也删除」开关：开启后，当附件目录（如 `./assets`）本身为空时也会一并删除；关闭（默认）则只删除其中的空子目录，保留附件目录本身；
-- 也可在设置面板直接点「执行清理」按钮，或使用命令面板的「删除空附件目录」命令；
-- 清理完成后右下角会提示删除了多少个空目录；
-- 设置里的「控制台日志」开关控制是否在开发者控制台（`Ctrl+Shift+I` → Console）打印扫描与删除日志，默认开启。
+## 📦 安装 / Installation
 
-### 日志示例
+### 从 Obsidian 社区插件安装 / From Obsidian Community Plugins
 
-```text
-[Remove Empty Assets] [扫描] 启动触发，解析到 2 个目标目录: ["A/assets","B/assets"]
-[Remove Empty Assets] [删除] 移入系统回收站: A/assets/empty1
-[Remove Empty Assets] [删除] 移入系统回收站: A/assets/empty2
-[Remove Empty Assets] [扫描完成] 启动，共删除 2 个空目录，失败 0 个
-[Remove Empty Assets] 检测到删除，加入定点扫描队列: A/note.md → A/assets
-[Remove Empty Assets] 检测到删除，加入定点扫描队列: A/assets/img.png → A/assets
-[Remove Empty Assets] [扫描] 删除触发，定点扫描目标: ["A/assets"]
-```
+1. 打开 Obsidian → **设置 → 第三方插件**。
+2. 点击 **浏览**，搜索 **Remove Empty Assets**。
+3. 点击 **安装**，然后 **启用**。
 
-## 路径写法示例
+---
 
-| 填写内容 | 含义 |
+1. Open Obsidian → **Settings → Community plugins**.
+2. Click **Browse** and search for **Remove Empty Assets**.
+3. Click **Install**, then **Enable**.
+
+### 从 GitHub Releases 安装 / From GitHub Releases
+
+1. 从最新 [release](../../releases) 下载 `main.js`、`styles.css` 和 `manifest.json`。
+2. 放入 `<vault>/.obsidian/plugins/remove-empty-assets`。
+3. 重启 Obsidian，在 **设置 → 第三方插件** 中启用 **Remove Empty Assets**。
+
+---
+
+1. Download `main.js`, `styles.css`, and `manifest.json` from the latest [release](../../releases).
+2. Place them in `<vault>/.obsidian/plugins/remove-empty-assets`.
+3. Restart Obsidian, then enable **Remove Empty Assets** from **Settings → Community plugins**.
+
+## 🚀 使用 / Usage
+
+1. 在设置中填写附件目录路径（例如 `./assets`），选择删除方式，然后保存。
+2. 删除 md 笔记或附件时，插件会自动定点扫描并清理产生的空目录；也可使用命令面板的「删除空附件目录」手动触发。
+3. 在设置面板点击「执行清理」可立即清理一次。
+
+---
+
+1. Fill in the attachment directory path (e.g. `./assets`) and choose a delete mode in the settings, then save.
+2. When you delete a note or an attachment, the plugin automatically scans and cleans up the resulting empty folders; you can also trigger it manually with the **Delete empty asset folders** command.
+3. Click **Run cleanup** in the settings tab to clean immediately.
+
+## ⚙️ 设置说明 / Settings
+
+| 设置 | 说明 |
 | --- | --- |
-| `D:\notes\attachments` | 绝对路径，只清理该目录（仅桌面端） |
-| `./assets` | 相对每个笔记目录，清理各笔记目录下名为 `assets` 的子目录 |
-| `.attachments` | 相对仓库根目录，即 `<仓库根>/.attachments`（隐藏文件夹） |
-| `attachments` | 相对仓库根目录，即 `<仓库根>/attachments` |
+| 附件目录路径 | ① 绝对路径（仅桌面端）；② `./` 开头=相对每个笔记目录；③ `.attachments` 等=相对仓库根 |
+| 删除方式 | 回收站：桌面端=系统回收站、移动端=`.trash`；或永久删除 |
+| 删除 md 笔记时自动扫描 | 删除笔记后定点扫描其附件目录 |
+| 删除附件时自动扫描 | 删除附件/子目录后定点扫描所在附件目录 |
+| 定时扫描 | 按间隔（秒）定期自动清理 |
+| 扫描间隔（秒） | 两次定时扫描的间隔 |
+| 空的附件目录本身也删除 | 附件目录本身为空时是否一并删除 |
+| 控制台日志 | 是否在控制台打印扫描与删除日志 |
+| 语言 | 界面语言；自动=跟随系统 |
+| 立即清理 | 手动执行一次清理 |
 
-## 技术说明
+| Setting | Description |
+| --- | --- |
+| Attachment directory path | ① absolute path (desktop only); ② `./` prefix = relative to each note; ③ `.attachments` etc. = relative to the vault root |
+| Delete mode | Trash: system trash on desktop / `.trash` on mobile; or permanent delete |
+| Auto-scan when a note is deleted | Scans the note's attachment directory after deletion |
+| Auto-scan when an attachment is deleted | Scans the containing directory after an attachment/subfolder is deleted |
+| Scheduled scan | Periodically cleans at an interval (seconds) |
+| Scan interval (seconds) | Interval between two scheduled scans |
+| Also delete empty attachment directories | Whether to delete the attachment directory itself when empty |
+| Console logging | Print scan and deletion logs to the console |
+| Language | UI language; Auto follows your system |
+| Clean now | Run a cleanup immediately |
 
-- **跨平台实现**：插件通过 Obsidian 自带的 `vault.adapter` API 完成列目录/删除等操作，桌面端与移动端通用；
-- **删除监听**：监听 `vault.on('delete')`（删除到系统回收站/永久删除）与 `vault.on('rename')` 且新路径在 `.trash/` 下（移到仓库内 .trash）两类情况；md 笔记删除会扫描其附件目录，附件/子目录删除若位于附件目录内也会定点扫描（`./` 配置只扫对应目录；全局配置扫对应目录）；多次删除会合并（防抖 1.5s）后批量清理；
-- **移动端**：没有 Node/Electron 环境，回收功能通过把空目录移动到仓库根的 `.trash` 文件夹实现（可恢复）；手机端不支持仓库外的绝对路径；
-- **桌面端**：回收功能使用 Obsidian 自带的系统回收站接口 `vault.trash(file, true)`（与 Obsidian 内部删除一致，规避渲染进程调用 `shell.trashItem` 在 Windows 上的已知问题）；若回收站失败则回退到仓库内 `.trash` 回收文件夹，绝不自动永久删除；
-- 隐藏文件视为目录内容，含隐藏文件的目录不会被删除；
-- 递归清理时不会删除附件目录之外的目录（如笔记所在文件夹本身）。
+## 📝 更新日志 / Changelog
 
-## 开发
+### 1.0.0
 
-```bash
-npm install        # 安装依赖
-npm run build      # 类型检查 + 打包，产出 main.js
-npm run dev        # 监听模式开发
-```
+- 🎉 首个版本：支持桌面端与移动端，路径三种写法，递归清理，删除笔记/附件定点扫描，定时扫描，回收站/永久删除，中英文界面。
+- 🎉 Initial release: desktop & mobile support, three path formats, recursive cleanup, targeted scan on note/attachment deletion, scheduled scan, trash/permanent delete, bilingual UI.
+
+## 🤝 参与贡献 / Contributing
+
+欢迎提交 issue 与 PR。/ Issues and pull requests are welcome.
+
+## 📄 许可证 / License
+
+[MIT](./LICENSE)
