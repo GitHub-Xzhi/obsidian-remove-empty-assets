@@ -656,9 +656,23 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 				console.error("[Remove Empty Assets] 系统回收站不可用，已跳过（未删除）:", absPath);
 				return deleted;
 			}
-			fs.rmSync(absPath, { recursive: true, force: true });
-			this.log("[删除][永久删除]:", absPath);
-			deleted += 1;
+			// 永久删除：Windows 上被占用（杀软、云同步等）可能瞬时报 EPERM，做有限重试
+			let lastErr: unknown = null;
+			for (let attempt = 0; attempt < 4; attempt++) {
+				if (attempt > 0) {
+					await new Promise((r) => setTimeout(r, 250 * attempt));
+				}
+				try {
+					fs.rmSync(absPath, { recursive: true, force: true });
+					this.log("[删除][永久删除]:", absPath);
+					deleted += 1;
+					return deleted;
+				} catch (e) {
+					lastErr = e;
+				}
+			}
+			console.error("[Remove Empty Assets] 永久删除失败，已跳过（未删除）:", absPath, lastErr);
+			return deleted;
 		}
 		return deleted;
 	}
@@ -716,9 +730,35 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 			}
 		}
 		// 用户显式选择“永久删除”时才直接删除
-		await this.app.vault.adapter.remove(relPath);
-		this.log("[删除][永久删除]:", relPath);
-		return true;
+		const folder = this.app.vault.getAbstractFileByPath(relPath);
+		if (!folder) {
+			return false; // 目录已不存在
+		}
+		// 用 Obsidian 的 vault.delete(folder, true) 而非裸 adapter.remove：
+		// 与 Obsidian 核心“永久删除”行为一致，会先处理 vault 内部引用与 watcher，
+		// 规避 Windows 上文件/目录被占用时 adapter.remove 报 EPERM（unlink 失败）。
+		this.markSelfMoved(relPath); // 忽略由此触发的 delete 事件，避免重复扫描
+		let lastErr: unknown = null;
+		for (let attempt = 0; attempt < 4; attempt++) {
+			if (attempt > 0) {
+				// Windows 上占用常为瞬时（Obsidian watcher、杀软、云同步等），间隔递增重试
+				await new Promise((r) => setTimeout(r, 250 * attempt));
+			}
+			const cur = this.app.vault.getAbstractFileByPath(relPath);
+			if (!cur) {
+				this.log("[删除][永久删除]:", relPath, "(已删除)");
+				return true;
+			}
+			try {
+				await this.app.vault.delete(cur, true);
+				this.log("[删除][永久删除]:", relPath);
+				return true;
+			} catch (e) {
+				lastErr = e;
+			}
+		}
+		console.error("[Remove Empty Assets] 永久删除失败，已跳过（未删除）:", relPath, lastErr);
+		return false;
 	}
 
 	// -----------------------------------------------------------------------
