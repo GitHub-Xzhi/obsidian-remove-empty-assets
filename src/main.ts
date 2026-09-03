@@ -137,6 +137,12 @@ const STRINGS: Record<string, { zh: string; en: string }> = {
 	optionTrash: { zh: "移入回收站（可恢复）", en: "Move to trash (recoverable)" },
 	optionPermanent: { zh: "永久删除（不可恢复）", en: "Permanently delete (irreversible)" },
 
+	settingScanStartupName: { zh: "启动时自动扫描", en: "Auto-scan on startup" },
+	settingScanStartupDesc: {
+		zh: "打开仓库时自动清理一次空目录。",
+		en: "Automatically clean empty folders once when the vault opens.",
+	},
+
 	settingScanNoteName: { zh: "删除 md 笔记时自动扫描", en: "Auto-scan when a note is deleted" },
 	settingScanNoteDesc: {
 		zh: "删除 md 笔记后，自动定点扫描其附件目录并清理空目录。",
@@ -189,6 +195,8 @@ interface PluginSettings {
 	scanOnNoteDelete: boolean;
 	/** 删除附件/附件目录内子目录时自动定点扫描所在附件目录 */
 	scanOnAttachmentDelete: boolean;
+	/** 打开仓库（Obsidian 启动）时自动清理一次 */
+	scanOnStartup: boolean;
 	/** 定时扫描：是否开启 */
 	timerEnabled: boolean;
 	/** 定时扫描间隔（秒） */
@@ -204,6 +212,7 @@ const DEFAULT_SETTINGS: PluginSettings = {
 	deleteEmptyRoot: false,
 	scanOnNoteDelete: true,
 	scanOnAttachmentDelete: true,
+	scanOnStartup: true,
 	timerEnabled: false,
 	timerInterval: 3600,
 	language: "auto",
@@ -246,7 +255,9 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 		// 启动自动清理：等待布局就绪后延迟执行，确保文件树已加载完成
 		this.app.workspace.onLayoutReady(() => {
 			window.setTimeout(() => {
-				void this.runCleanup(true, "启动");
+				if (this.settings.scanOnStartup) {
+					void this.runCleanup(true, "启动");
+				}
 			}, 2000);
 		});
 
@@ -788,6 +799,18 @@ class RemoveEmptyAssetsSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.deleteMode)
 					.onChange(async (value) => {
 						this.plugin.settings.deleteMode = value as PluginSettings["deleteMode"];
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName(this.plugin.t("settingScanStartupName"))
+			.setDesc(this.plugin.t("settingScanStartupDesc"))
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.scanOnStartup)
+					.onChange(async (value) => {
+						this.plugin.settings.scanOnStartup = value;
 						await this.plugin.saveSettings();
 					})
 			);
