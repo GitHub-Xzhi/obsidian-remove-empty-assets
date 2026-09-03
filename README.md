@@ -1,8 +1,8 @@
 # Remove Empty Assets
 
-> 一个用于 Obsidian 的轻量插件：删除附件目录中的**空目录**，支持桌面端与移动端。
+> 一个用于 Obsidian 的轻量插件：删除附件目录中的**空目录**，支持桌面端与移动端。如果你喜欢这个项目的话，欢迎给个 star！
 >
-> A lightweight Obsidian plugin that removes **empty folders** inside your attachment directories. Works on both desktop and mobile.
+> A lightweight Obsidian plugin that removes **empty folders** inside your attachment directories. Works on both desktop and mobile. If you like this project, please give it a star!
 
 ## 📖 项目简介 / Overview
 
@@ -108,13 +108,6 @@ During normal Obsidian use, deleting notes or attachments often leaves a pile of
 | Language | UI language; Auto follows your system |
 | Clean now | Run a cleanup immediately |
 
-## 📝 更新日志 / Changelog
-
-### 1.0.0
-
-- 🎉 首个版本：支持桌面端与移动端，路径三种写法，递归清理，删除笔记/附件定点扫描，定时扫描，回收站/永久删除，中英文界面。
-- 🎉 Initial release: desktop & mobile support, three path formats, recursive cleanup, targeted scan on note/attachment deletion, scheduled scan, trash/permanent delete, bilingual UI.
-
 ## 🤝 参与贡献 / Contributing
 
 欢迎提交 issue 与 PR。/ Issues and pull requests are welcome.
@@ -122,3 +115,12 @@ During normal Obsidian use, deleting notes or attachments often leaves a pile of
 ## 📄 许可证 / License
 
 [MIT](./LICENSE)
+
+## 💖 支持 / Support
+
+如果你喜欢这个插件，并对我表示感谢，你可以在这里请我喝一杯奶茶！
+
+If you enjoy this plugin and want to say thanks, you can buy me a bubble tea!
+|             **微信 / WeChat Pay**              |           **微信赞赏 / WeChat Tip**           |              **支付宝 / Alipay**              |
+| :-------------------------------: | :------------------------------: | :----------------------------------: |
+| ![](assets/README/wx_fkm.png) | ![](assets/README/wxzsm.png) | ![](assets/README/zfb_fkm.png) |
