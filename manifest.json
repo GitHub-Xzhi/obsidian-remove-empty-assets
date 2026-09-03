@@ -1,7 +1,7 @@
 {
 	"id": "remove-empty-assets",
 	"name": "Remove Empty Assets",
-	"version": "1.0.1",
+	"version": "1.0.2",
 	"minAppVersion": "0.15.0",
 	"description": "中文: 删除附件目录中的空目录，支持桌面端与移动端。支持三种路径写法、删除时自动扫描、定时扫描、回收站或永久删除、中英文界面 | EN: Remove empty folders inside attachment directories, desktop & mobile. Path formats, auto-scan on deletion, scheduled scan, trash/permanent delete, bilingual UI.",
 	"author": "Xzhi",

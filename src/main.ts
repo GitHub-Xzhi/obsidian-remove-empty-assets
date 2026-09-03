@@ -816,7 +816,7 @@ class RemoveEmptyAssetsSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		containerEl.createEl("h2", { text: "Remove Empty Assets" });
+		new Setting(containerEl).setName("Remove Empty Assets").setHeading();
 
 		// 语言
 		new Setting(containerEl)
