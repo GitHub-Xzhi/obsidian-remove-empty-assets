@@ -136,6 +136,9 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 	private deleteScanTimer: number | null = null;
 	private pendingDeleteTargets: CleanTarget[] = [];
 
+	// 由本插件自己移动/删除的路径（用于忽略由此触发的 delete/rename 事件，避免自我触发重复扫描）
+	private selfMovedPaths: Set<string> = new Set();
+
 	async onload() {
 		await this.loadSettings();
 
@@ -249,6 +252,15 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 		return this.cleanRelative(t.relPath);
 	}
 
+	/** 记录由本插件自己移动/删除的路径，用于忽略由此触发的 delete/rename 事件（避免自我触发重复扫描） */
+	private markSelfMoved(path: string): void {
+		this.selfMovedPaths.add(path);
+		// 5 秒后自动清理，避免长期占用内存，也不妨碍以后同路径的真实删除
+		window.setTimeout(() => {
+			this.selfMovedPaths.delete(path);
+		}, 5000);
+	}
+
 	// -----------------------------------------------------------------------
 	// 删除触发：md 笔记删除 → 定点扫描其附件目录；
 	// 附件/子目录删除 → 若位于附件目录内，定点扫描该附件目录
@@ -256,6 +268,13 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 	// -----------------------------------------------------------------------
 	onFileDeleted(file: TAbstractFile, originalPath?: string): void {
 		const path = originalPath ?? file.path;
+
+		// 忽略由本插件自己移动/删除产生的 delete/rename 事件（如把空子目录移入回收站时）
+		if (this.selfMovedPaths.has(path)) {
+			this.selfMovedPaths.delete(path);
+			return;
+		}
+
 		const raw = (this.settings.attachmentPath || "").trim();
 		if (!raw) {
 			return;
@@ -310,7 +329,13 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 		this.log("检测到删除，加入定点扫描队列:", path, "→", target.relPath || target.absPath);
 
 		// 防抖：合并短时间内的多次删除，避免频繁扫描
-		this.pendingDeleteTargets.push(target);
+		// 同一目标只入队一次，避免同一批里重复扫描同一目录
+		const sameTarget = this.pendingDeleteTargets.some(
+			(t) => t.relPath === target.relPath && (t.absPath ?? "") === (target.absPath ?? "")
+		);
+		if (!sameTarget) {
+			this.pendingDeleteTargets.push(target);
+		}
 		if (this.deleteScanTimer !== null) {
 			window.clearTimeout(this.deleteScanTimer);
 		}
@@ -335,7 +360,7 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 				console.error("[Remove Empty Assets] 定点清理失败:", t.relPath || t.absPath, e);
 			}
 		}
-		this.log(`[扫描完成] md 删除定点扫描，共删除 ${deleted} 个空目录，失败 ${errors} 个`);
+		this.log(`[扫描完成] 删除定点扫描，共删除 ${deleted} 个空目录，失败 ${errors} 个`);
 
 		if (deleted === 0 && errors === 0) {
 			return;
@@ -501,6 +526,7 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 			const folder = this.app.vault.getAbstractFileByPath(relPath);
 			if (folder) {
 				try {
+					this.markSelfMoved(relPath); // 忽略由此触发的 delete 事件，避免重复扫描
 					await this.app.vault.trash(folder, true);
 					this.log("[删除] 移入系统回收站:", relPath);
 					return true;
@@ -550,6 +576,7 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 			// 目录已不存在，无需移动
 			return false;
 		}
+		this.markSelfMoved(relPath); // 忽略由此触发的 rename 事件（移到 .trash），避免重复扫描
 		await this.app.vault.rename(folder, target);
 		return true;
 	}
