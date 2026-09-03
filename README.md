@@ -31,7 +31,19 @@ Obsidian 插件：删除附件目录中的**空目录**，支持桌面端与移�
 
 - 打开「设置 → 第三方插件 → Remove Empty Assets」，填写附件目录路径，选择删除方式；
 - 也可在设置面板直接点「执行清理」按钮，或使用命令面板的「删除空附件目录」命令；
-- 清理完成后右下角会提示删除了多少个空目录。
+- 清理完成后右下角会提示删除了多少个空目录；
+- 设置里的「控制台日志」开关控制是否在开发者控制台（`Ctrl+Shift+I` → Console）打印扫描与删除日志，默认开启。
+
+### 日志示例
+
+```text
+[Remove Empty Assets] [扫描] 启动触发，解析到 2 个目标目录: ["A/assets","B/assets"]
+[Remove Empty Assets] [删除] 移入系统回收站: A/assets/empty1
+[Remove Empty Assets] [删除] 移入系统回收站: A/assets/empty2
+[Remove Empty Assets] [扫描完成] 启动，共删除 2 个空目录，失败 0 个
+[Remove Empty Assets] 检测到 md 删除，加入定点扫描队列: A/note.md → A/assets
+[Remove Empty Assets] [扫描] md 删除触发，定点扫描目标: ["A/assets"]
+```
 
 ## 路径写法示例
 

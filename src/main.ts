@@ -86,11 +86,14 @@ interface PluginSettings {
 	attachmentPath: string;
 	/** 删除方式：trash 回收站(.trash)；permanent 永久删除 */
 	deleteMode: "trash" | "permanent";
+	/** 是否在控制台打印扫描与删除日志 */
+	consoleLog: boolean;
 }
 
 const DEFAULT_SETTINGS: PluginSettings = {
 	attachmentPath: ".attachments",
 	deleteMode: "trash",
+	consoleLog: true,
 };
 
 /** 一个待清理的目标目录：优先使用 vault 相对路径；absPath 仅用于仓库外的绝对路径配置（桌面端） */
@@ -117,14 +120,14 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 			id: "remove-empty-assets",
 			name: "删除空附件目录",
 			callback: () => {
-				void this.runCleanup(false);
+				void this.runCleanup(false, "命令面板");
 			},
 		});
 
 		// 启动自动清理：等待布局就绪后延迟执行，确保文件树已加载完成
 		this.app.workspace.onLayoutReady(() => {
 			window.setTimeout(() => {
-				void this.runCleanup(true);
+				void this.runCleanup(true, "启动");
 			}, 2000);
 		});
 
@@ -154,15 +157,25 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 		await this.saveData(this.settings);
 	}
 
+	/** 控制台日志：仅当设置开启时打印 */
+	private log(...args: unknown[]): void {
+		if (this.settings.consoleLog) {
+			console.log("[Remove Empty Assets]", ...args);
+		}
+	}
+
 	// -----------------------------------------------------------------------
 	// 清理入口
 	// -----------------------------------------------------------------------
-	async runCleanup(silent: boolean): Promise<void> {
+	async runCleanup(silent: boolean, source = "手动"): Promise<void> {
 		const targets = this.resolveTargetDirs();
+		this.log(`[扫描] ${source}触发，解析到 ${targets.length} 个目标目录:`,
+			targets.map((t) => t.relPath || t.absPath));
 		if (targets.length === 0) {
 			if (!silent) {
 				new Notice("没有找到可清理的附件目录（请检查设置中的附件目录路径）。");
 			}
+			this.log(`[扫描完成] ${source}，无目标目录`);
 			return;
 		}
 
@@ -176,6 +189,7 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 				console.error("[Remove Empty Assets] 清理失败:", t.relPath || t.absPath, e);
 			}
 		}
+		this.log(`[扫描完成] ${source}，共删除 ${deleted} 个空目录，失败 ${errors} 个`);
 
 		// 静默启动且无任何变化时不再打扰用户
 		if (silent && deleted === 0 && errors === 0) {
@@ -238,6 +252,8 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 			return;
 		}
 
+		this.log("检测到 md 删除，加入定点扫描队列:", file.path, "→", target.relPath || target.absPath);
+
 		// 防抖：合并短时间内的多次删除，避免频繁扫描
 		this.pendingDeleteTargets.push(target);
 		if (this.deleteScanTimer !== null) {
@@ -252,6 +268,8 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 
 	/** 对一组定点目标执行清理（笔记删除触发） */
 	async runTargetedCleanup(targets: CleanTarget[]): Promise<void> {
+		this.log("[扫描] md 删除触发，定点扫描目标:",
+			targets.map((t) => t.relPath || t.absPath));
 		let deleted = 0;
 		let errors = 0;
 		for (const t of targets) {
@@ -262,6 +280,7 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 				console.error("[Remove Empty Assets] 定点清理失败:", t.relPath || t.absPath, e);
 			}
 		}
+		this.log(`[扫描完成] md 删除定点扫描，共删除 ${deleted} 个空目录，失败 ${errors} 个`);
 
 		if (deleted === 0 && errors === 0) {
 			return;
@@ -372,6 +391,7 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 				if (shell) {
 					try {
 						await shell.trashItem(absPath);
+						this.log("[删除] 移入系统回收站:", absPath);
 						deleted += 1;
 						return deleted;
 					} catch (e) {
@@ -380,6 +400,7 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 				}
 			}
 			fs.rmSync(absPath, { recursive: true, force: true });
+			this.log("[删除] 永久删除:", absPath);
 			deleted += 1;
 		}
 		return deleted;
@@ -393,6 +414,7 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 			if (Platform.isMobile) {
 				// 移动端：移到 Obsidian 自带的 .trash 回收文件夹（可恢复）
 				await this.moveToObsidianTrash(relPath);
+				this.log("[删除] 移入 .trash 回收文件夹:", relPath);
 				return;
 			}
 			// 桌面端：移入系统回收站
@@ -402,6 +424,7 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 					const abs = (this.app.vault.adapter as any).getFullPath?.(relPath);
 					if (abs) {
 						await shell.trashItem(abs);
+						this.log("[删除] 移入系统回收站:", relPath);
 						return;
 					}
 				} catch (e) {
@@ -411,6 +434,7 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 		}
 		// 永久删除（或回收站不可用时的回退）
 		await this.app.vault.adapter.remove(relPath);
+		this.log("[删除] 永久删除:", relPath);
 	}
 
 	// -----------------------------------------------------------------------
@@ -492,6 +516,18 @@ class RemoveEmptyAssetsSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
+			.setName("控制台日志")
+			.setDesc("开启后，在开发者控制台打印扫描与删除日志（便于排查）。")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.consoleLog)
+					.onChange(async (value) => {
+						this.plugin.settings.consoleLog = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
 			.setName("立即清理")
 			.setDesc("手动执行一次清理，效果与命令面板的「删除空附件目录」相同。")
 			.addButton((button) =>
@@ -499,7 +535,7 @@ class RemoveEmptyAssetsSettingTab extends PluginSettingTab {
 					.setButtonText("执行清理")
 					.setCta()
 					.onClick(() => {
-						void this.plugin.runCleanup(false);
+						void this.plugin.runCleanup(false, "设置按钮");
 					})
 			);
 	}
