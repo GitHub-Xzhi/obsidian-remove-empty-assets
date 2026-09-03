@@ -5,6 +5,8 @@ import {
 	Plugin,
 	PluginSettingTab,
 	Setting,
+	TAbstractFile,
+	TFile,
 	TFolder,
 	normalizePath,
 } from "obsidian";
@@ -14,8 +16,12 @@ import {
  * 删除附件目录中的空目录（桌面端 + 移动端均可使用）。
  * 附件目录路径支持三种写法：
  *   1) 绝对路径（如 D:\notes\attachments）—— 仅桌面端支持，且只处理这一个目录；
- *   2) 以 "." 开头（如 .attachments）—— 相对每个笔记目录，扫描全库中所有同名目录并分别清理；
- *   3) 其他相对路径（如 attachments）—— 相对仓库根目录。
+ *   2) 以 "./" 开头（如 ./assets）—— 相对每个笔记目录，扫描全库中所有同名子目录并分别清理；
+ *   3) 其他相对路径（如 .attachments 或 attachments）—— 相对仓库根目录。
+ * 触发方式：
+ *   - 打开仓库时自动清理一次；
+ *   - 监听 md 文件删除：被删笔记的附件目录立即定点扫描（./ 配置只扫该笔记的目录）；
+ *   - 命令面板 / 设置页按钮手动触发。
  * 删除方式（设置中切换，默认移入回收站）：
  *   - trash：桌面端移入系统回收站；移动端移到 Obsidian 自带的 .trash 回收文件夹（均可恢复）
  *   - permanent：永久删除（不可恢复）
@@ -58,11 +64,25 @@ function isAbsolutePath(p: string): boolean {
 	return /^[a-zA-Z]:[\\/]/.test(p) || p.startsWith("/");
 }
 
+/** 判断是否以 "./"（或 ".\\"）开头：表示相对每个笔记目录 */
+function isPerNotePath(raw: string): boolean {
+	return raw.startsWith("./") || raw.startsWith(".\\");
+}
+
+/** 提取相对笔记目录的子目录名："./assets" -> "assets"；无法提取时返回空串 */
+function perNoteSubdir(raw: string): string {
+	return raw
+		.replace(/^\.\//, "")
+		.replace(/^\.\\/, "")
+		.replace(/^[/\\]+/, "")
+		.replace(/[/\\]+$/, "");
+}
+
 // ---------------------------------------------------------------------------
 // 设置
 // ---------------------------------------------------------------------------
 interface PluginSettings {
-	/** 附件目录路径：绝对路径(仅桌面) / "." 开头(相对笔记目录，扫全库同名目录) / 其他(相对仓库根) */
+	/** 附件目录路径：绝对路径(仅桌面) / "./" 开头(相对笔记目录，扫全库同名子目录) / 其他(相对仓库根) */
 	attachmentPath: string;
 	/** 删除方式：trash 回收站(.trash)；permanent 永久删除 */
 	deleteMode: "trash" | "permanent";
@@ -85,6 +105,10 @@ interface CleanTarget {
 export default class RemoveEmptyAssetsPlugin extends Plugin {
 	settings: PluginSettings;
 
+	// 笔记删除触发扫描的防抖状态（合并短时间内的多次删除）
+	private deleteScanTimer: number | null = null;
+	private pendingDeleteTargets: CleanTarget[] = [];
+
 	async onload() {
 		await this.loadSettings();
 
@@ -104,11 +128,22 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 			}, 2000);
 		});
 
+		// 监听 md 文件删除：触发定点扫描（./ 配置只扫被删笔记的附件目录，不做全库扫描）
+		this.registerEvent(
+			this.app.vault.on("delete", (file) => {
+				this.onFileDeleted(file);
+			})
+		);
+
 		this.addSettingTab(new RemoveEmptyAssetsSettingTab(this.app, this));
 	}
 
 	onunload() {
-		// 无需要清理的资源
+		// 清理防抖定时器
+		if (this.deleteScanTimer !== null) {
+			window.clearTimeout(this.deleteScanTimer);
+			this.deleteScanTimer = null;
+		}
 	}
 
 	async loadSettings() {
@@ -135,11 +170,7 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 		let errors = 0;
 		for (const t of targets) {
 			try {
-				if (t.absPath) {
-					deleted += await this.cleanAbsolute(t.absPath);
-				} else {
-					deleted += await this.cleanRelative(t.relPath);
-				}
+				deleted += await this.cleanTarget(t);
 			} catch (e) {
 				errors++;
 				console.error("[Remove Empty Assets] 清理失败:", t.relPath || t.absPath, e);
@@ -148,6 +179,91 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 
 		// 静默启动且无任何变化时不再打扰用户
 		if (silent && deleted === 0 && errors === 0) {
+			return;
+		}
+
+		const parts = [`已清理 ${deleted} 个空目录`];
+		if (errors > 0) {
+			parts.push(`，${errors} 个目录处理失败（详见控制台）`);
+		}
+		if (this.settings.deleteMode === "trash") {
+			parts.push(Platform.isMobile ? "（已移入 .trash 回收文件夹）" : "（已移入系统回收站）");
+		}
+		new Notice(parts.join(""));
+	}
+
+	// -----------------------------------------------------------------------
+	// 清理单个目标：优先走 vault 相对路径（跨平台）；绝对路径仅桌面端
+	// -----------------------------------------------------------------------
+	async cleanTarget(t: CleanTarget): Promise<number> {
+		if (t.absPath) {
+			return this.cleanAbsolute(t.absPath);
+		}
+		return this.cleanRelative(t.relPath);
+	}
+
+	// -----------------------------------------------------------------------
+	// md 文件删除触发：定点扫描被删笔记的附件目录（./ 配置只扫该目录，不做全库扫描）
+	// -----------------------------------------------------------------------
+	onFileDeleted(file: TAbstractFile): void {
+		// 只关心 markdown 文件被删除
+		if (!(file instanceof TFile) || file.extension !== "md") {
+			return;
+		}
+
+		const raw = (this.settings.attachmentPath || "").trim();
+		if (!raw) {
+			return;
+		}
+
+		let target: CleanTarget | null = null;
+		if (isPerNotePath(raw)) {
+			// ./ 配置：定位到被删笔记所在目录下的附件子目录
+			const sub = perNoteSubdir(raw);
+			if (!sub) {
+				return;
+			}
+			const parentDir = file.parent ? file.parent.path : "";
+			const rel = parentDir ? normalizePath(parentDir + "/" + sub) : sub;
+			target = { relPath: rel };
+		} else {
+			// 其他配置（全局单一目录）：直接解析出该目录
+			const targets = this.resolveTargetDirs();
+			if (targets.length > 0) {
+				target = targets[0];
+			}
+		}
+
+		if (!target) {
+			return;
+		}
+
+		// 防抖：合并短时间内的多次删除，避免频繁扫描
+		this.pendingDeleteTargets.push(target);
+		if (this.deleteScanTimer !== null) {
+			window.clearTimeout(this.deleteScanTimer);
+		}
+		this.deleteScanTimer = window.setTimeout(() => {
+			void this.runTargetedCleanup(this.pendingDeleteTargets);
+			this.pendingDeleteTargets = [];
+			this.deleteScanTimer = null;
+		}, 1500);
+	}
+
+	/** 对一组定点目标执行清理（笔记删除触发） */
+	async runTargetedCleanup(targets: CleanTarget[]): Promise<void> {
+		let deleted = 0;
+		let errors = 0;
+		for (const t of targets) {
+			try {
+				deleted += await this.cleanTarget(t);
+			} catch (e) {
+				errors++;
+				console.error("[Remove Empty Assets] 定点清理失败:", t.relPath || t.absPath, e);
+			}
+		}
+
+		if (deleted === 0 && errors === 0) {
 			return;
 		}
 
@@ -179,11 +295,11 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 			return [{ relPath: "", absPath: raw }];
 		}
 
-		// 2) "." 开头：相对每个笔记目录，扫描全库同名目录
-		if (raw.startsWith(".")) {
-			const sub = raw.replace(/^\.+/, "").replace(/^[/\\]+/, "");
+		// 2) "./" 开头：相对每个笔记目录，扫描全库同名子目录
+		if (isPerNotePath(raw)) {
+			const sub = perNoteSubdir(raw);
 			if (!sub) {
-				// 形如 "." 或 "./"：没有目录名，无法定位，跳过本次清理
+				// 形如 "./"：没有子目录名，无法定位，跳过本次清理
 				return [];
 			}
 			const targets: CleanTarget[] = [];
@@ -195,7 +311,7 @@ export default class RemoveEmptyAssetsPlugin extends Plugin {
 			return targets;
 		}
 
-		// 3) 其他相对路径：相对仓库根目录
+		// 3) 其他相对路径（.attachments / attachments / 子路径）：相对仓库根目录
 		const rel = normalizePath(raw.replace(/^[/\\]+/, ""));
 		return [{ relPath: rel }];
 	}
@@ -343,9 +459,10 @@ class RemoveEmptyAssetsSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("附件目录路径")
 			.setDesc(
-				"支持三种写法：① 绝对路径，如 D:\\notes\\attachments（仅桌面端）；" +
-				"② 以 \".\" 开头表示相对每个笔记目录，如 .attachments（将扫描全库中所有同名目录，清理其中的空目录）；" +
-				"③ 其他写法相对仓库根目录，如 attachments。"
+				"支持四种写法：① 绝对路径，如 D:\\notes\\attachments（仅桌面端）；" +
+				"② 以 \"./\" 开头表示相对每个笔记目录，如 ./assets（清理各笔记目录下名为 assets 的子目录）；" +
+				"③ 以 \".\" 开头（无斜杠）表示相对仓库根目录，如 .attachments；" +
+				"④ 其他写法相对仓库根目录，如 attachments。删除 md 笔记时会自动定点扫描其附件目录。"
 			)
 			.addText((text) =>
 				text
