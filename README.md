@@ -12,10 +12,9 @@ During normal Obsidian use, deleting notes or attachments often leaves a pile of
 
 ## 👀 预览 / Preview
 
-<div align="center">
-  <img src="assets/README/设置预览-中文.png" alt="设置界面（中文）" width="50%"/>
-  <img src="assets/README/设置预览-英文.png" alt="Settings interface (English)" width="48%"/>
-</div>
+![](assets/README/设置预览-中文.png)
+
+![](assets/README/设置预览-英文.png)
 
 ## ✨ 功能特性 / Features
 
@@ -128,6 +127,12 @@ During normal Obsidian use, deleting notes or attachments often leaves a pile of
 如果你喜欢这个插件，并对我表示感谢，你可以在这里请我喝一杯奶茶！
 
 If you enjoy this plugin and want to say thanks, you can buy me a bubble tea!
-|             **微信 / WeChat Pay**              |           **微信赞赏 / WeChat Tip**           |              **支付宝 / Alipay**              |
-| :-------------------------------: | :------------------------------: | :----------------------------------: |
-| ![](assets/README/wx_fkm.png) | ![](assets/README/wxzsm.png) | ![](assets/README/zfb_fkm.png) |
+
+
+<table align="center">
+  <tr>
+    <td align="center"><strong>微信 / WeChat Pay</strong><br><img src="assets/README/wx_fkm.png" alt="微信 / WeChat Pay"></td>
+    <td align="center"><strong>微信赞赏 / WeChat Tip</strong><br><img src="assets/README/wxzsm.png" alt="微信赞赏 / WeChat Tip"></td>
+    <td align="center"><strong>支付宝 / Alipay</strong><br><img src="assets/README/zfb_fkm.png" alt="支付宝 / Alipay"></td>
+  </tr>
+</table>
